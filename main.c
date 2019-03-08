@@ -6,145 +6,233 @@
 #include <ctype.h>
 #include <stdbool.h>
 
-char buf[256];
-char temp[256];
-const int NOT_EXPR = -1;
-const int WRONG_FORMAT = -2;
-const int DELIMITER = -3;
-const int NUMBER = -4;
-const int NOT_FOUND = -5;
-const int ERROR = -6;
-const char* RESERVED[] = { "and", "not", "xor", "or", "True", "False" };
-const char* RESERVED_C[] = { "&", "!", "+", "|", "1", "0" };
+const char TRUE[] = "True";
+const char FALSE[] = "False";
+const char EQUAL = '=';
+const char XOR = '+';
+const char INVERSION = '!';
+const char CONJUNCTION = '&';
+const char DISJUNCTION = '|';
+const char SEMICOLON = ';';
+const char SPACE = ' ';
+const char LEFT_BRACKET = '(';
+const char RIGHT_BRACKET = ')';
+const char ZERO = '0';
+const char ONE = '1';
 
-typedef struct Node {
-    struct Node* Next;
-    char* Name;
-    bool Data;
-} Node_t;
+enum { BUFFER_SIZE = 256 };
+enum {
+    NOT_EXPR = -1,
+    WRONG_FORMAT = -2,
+    DELIMITER = -3,
+    NUMBER = -4,
+    NOT_FOUND = -5,
+    ERROR = -6
+};
+
+const char* RESERVED[] = { "and", "not", "xor", "or", "True", "False" };
+const char* SERVICE_CHRS[] = { "&", "!", "+", "|", "1", "0" };
+
+typedef struct node {
+    struct node *next;
+    char* name;
+    bool data;
+} node_t;
 
 typedef struct list {
     size_t size;
-    Node_t *head;
-    Node_t *tail;
+    node_t *head;
+    node_t *tail;
 } list_t;
 
 typedef struct stack {
     char c;
     struct stack *next;
-} stack;
+} stack_t;
 
 /* Пpототипы функций */
-stack *push(struct stack *, char);
-char DEL(struct stack **);
-int PRIOR(char);
+void error_msg();
+void print_result(int v);
+bool is_operator(char c);
+bool is_value(char c);
+bool is_possible(char c);
+bool has_operators(const char *expr);
+bool is_right_format(const char *str);
+
+/* работа со стэком*/
+stack_t *push(stack_t *head, char c);
+char pop(stack_t **head);
+int get_priority(char c);
 
 /* работа со строками*/
 /* замена подстроки строкой*/
-char *str_replace(char *, int, const char *,
-    const char *, const char *);
+char *str_replace(char *dst, int num, const char *str,
+    const char *orig, const char *rep);
 /* удаление выбранного символа*/
-size_t remove_ch(char *, char);
+size_t remove_ch(char *str, char c);
 
 /* работа с листом*/
 list_t *create_list();
-void list_push(list_t *, char *, bool);
-int get_value(list_t *, char *);
-void list_pop(list_t *);
-
-/* проверка на правильный формат*/
-bool is_right_format(const char *);
-bool is_reserved(char);
+void list_push(list_t *lt, char *name, bool value);
+int get_value(list_t *lt, char *name);
+void list_pop(list_t *lt);
 
 /* парсинг <name>=True|False */
-int analyse_and_add(char *, list_t *);
+int analyse_and_add(char *expr, list_t *base);
 /* перевод выражения к виду (!1&0)|1+1 */
-int convert(char *, list_t *);
+int convert(char *expr, list_t *base);
 /* перевод в обратную польскую нотацию*/
-char *to_rpn(const char *, list_t *);
+char *to_rpn(const char *expr, list_t *base);
 /* вычисление */
-int calculate(char *, list_t *);
+int calculate(char *expr, list_t *base);
+
+
 
 int main()
 {
     list_t *list = create_list();
-    do
-    {
-        fgets(buf, 256, stdin);
+    char buf[BUFFER_SIZE];
 
+    do {
+        char *success = fgets(buf, BUFFER_SIZE, stdin);
+        if (success == NULL) {
+            error_msg();
+            break;
+        }
+
+        // Проверка на правильность задания данных <name>=True|False
         int status = analyse_and_add(buf, list);
-        if (status == WRONG_FORMAT)
-        {
-            printf("%s", "[error]");
+        if (status == WRONG_FORMAT) {
+            error_msg();
             break;
         }
-        else if (status == NOT_EXPR)
-        {
+
+        else if (status == NOT_EXPR) {
             int result = calculate(buf, list);
-            if (result == 1) {
-                printf("%s", "True");
-            } else if (result == 0) {
-                printf("%s", "False");
-            } else {
-                printf("%s", "[error]");
-            }
+            print_result(result);
             break;
         }
-    } while (1);
+    } while (true);
 
     while (list->size != 0) {
         list_pop(list);
     }
     free(list);
-
-    system("pause");
     return 0;
+}
+
+
+void error_msg() {
+    printf("[error]");
+}
+
+void print_result(int v)
+{
+    if (v == 1) {
+        printf(TRUE);
+    }
+    else if (v == 0) {
+        printf(FALSE);
+    }
+    else {
+
+        error_msg();
+    }
+}
+
+bool is_operator(char c)
+{
+    return strchr("!&|+", c) != NULL;
+}
+
+bool is_value(char c)
+{
+    return c == ONE || c == ZERO;
+}
+
+bool is_possible(char c)
+{
+    return strchr("() \n\t", c) == NULL && !is_operator(c) && !is_value(c);
+}
+
+bool has_operators(const char *expr)
+{
+    bool no_operators = strchr(expr, XOR) == NULL &&
+        strchr(expr, DISJUNCTION) == NULL &&
+        strchr(expr, CONJUNCTION) == NULL &&
+        strchr(expr, INVERSION) == NULL;
+
+    return !no_operators;
+}
+
+bool is_right_format(const char *str)
+{
+    bool only_small = false;
+    // проверка на маленькие латинские буквы
+    for (size_t i = 0; i < strlen(str); ++i) {
+        if (str[i] >= 'a' && str[i] <= 'z') {
+            only_small = true;
+        }
+        else {
+            only_small = false;
+            break;
+        }
+    }
+
+    // проверка на запрещенные имена and or not xor;
+    if (only_small) {
+        for (size_t k = 0; RESERVED[k]; ++k) {
+            if (strcmp(str, RESERVED[k]) == 0)
+                return false;
+        }
+    }
+
+    return only_small;
 }
 
 /* Функция push записывает на стек (на веpшину котоpого указывает HEAD)
    символ a . Возвpащает указатель на новую веpшину стека */
-stack *push(struct stack *HEAD, char a)
+stack_t *push(stack_t *head, char c)
 {
-    stack *PTR = (stack*)malloc(sizeof(struct stack));
-    if (PTR == NULL)
-    {
+    stack_t *ptr = (stack_t*)malloc(sizeof(stack_t));
+    if (ptr == NULL) {
         /* Если её нет - выход */
-        puts("[error]");
-        exit(0);
+        error_msg();
+        return NULL;
     }
     /* Инициализация созданной веpшины */
-    PTR->c = a;
+    ptr->c = c;
     /* и подключение её к стеку */
-    PTR->next = HEAD;
+    ptr->next = head;
     /* PTR -новая веpшина стека */
-    return PTR;
+    return ptr;
 }
 
-/* Функция DEL удаляет символ с веpшины стека.
+/* Функция pop удаляет символ с веpшины стека.
    Возвpащает удаляемый символ.
    Изменяет указатель на веpшину стека */
-char DEL(stack **HEAD)
+char pop(stack_t **head)
 {
-    stack *PTR;
-    char a;
+    stack_t *PTR = NULL;
+    char el;
     /* Если стек пуст,  возвpащается '\0' */
-    if (*HEAD == NULL)
+    if (*head == NULL)
         return '\0';
     /* в PTR - адpес веpшины стека */
-    PTR = *HEAD;
-    a = PTR->c;
+    PTR = *head;
+    el = PTR->c;
     /* Изменяем адpес веpшины стека */
-    *HEAD = PTR->next;
+    *head = PTR->next;
     /* Освобождение памяти */
     free(PTR);
     /* Возвpат символа с веpшины стека */
-    return a;
+    return el;
 }
 
-/* Функция PRIOR возвpащает пpиоpитет аpифм. опеpации */
-int PRIOR(char a)
+/* Функция  возвpащает пpиоpитет  опеpации */
+int get_priority(char c)
 {
-    switch (a)
+    switch (c)
     {
     case '!':
         return 5;
@@ -217,13 +305,13 @@ list_t* create_list()
 
 void list_push(list_t *lt, char *name, bool value)
 {
-    Node_t* node = (Node_t*)malloc(sizeof(Node_t));
+    node_t* node = (node_t*)malloc(sizeof(node_t));
     if (!node)
         return;
 
-    node->Name = name;
-    node->Data = value;
-    node->Next = lt->head;
+    node->name = name;
+    node->data = value;
+    node->next = lt->head;
 
     lt->head = node;
     lt->size += 1;
@@ -231,11 +319,11 @@ void list_push(list_t *lt, char *name, bool value)
 
 int get_value(list_t *lt, char* name)
 {
-    Node_t *curr = lt->head;
+    node_t *curr = lt->head;
     while (curr != NULL) {
-        if (strcmp(name, curr->Name) == 0)
-            return curr->Data;
-        curr = curr->Next;
+        if (strcmp(name, curr->name) == 0)
+            return curr->data;
+        curr = curr->next;
     }
     return NOT_FOUND;
 }
@@ -246,10 +334,10 @@ void list_pop(list_t *lt)
         return;
     }
 
-    Node_t *node = lt->head;
-    free(lt->head->Name);
+    node_t *node = lt->head;
+    free(lt->head->name);
     lt->size -= 1;
-    lt->head = node->Next;
+    lt->head = node->next;
     free(node);
 
     if (lt->size == 0) {
@@ -258,45 +346,21 @@ void list_pop(list_t *lt)
     }
 }
 
-bool is_right_format(const char *str)
-{
-    bool only_small = false;
-    // проверка на маленькие латинские буквы
-    for (size_t i = 0; i < strlen(str); ++i) {
-        if (str[i] >= 'a' && str[i] <= 'z') {
-            only_small = true;
-        } else {
-            only_small = false;
-            break;
-        }
-    }
-
-    // проверка на запрещенные имена and or not xor;
-    if (only_small) {
-        for (size_t k = 0; RESERVED[k]; ++k) {
-            if (strcmp(str, RESERVED[k]) == 0)
-                return false;
-        }
-    }
-
-    return only_small;
-}
-
 // Запись в лист пары <name>,  <True|False>
-int analyse_and_add(char *expr, list_t *lt)
+int analyse_and_add(char *expr, list_t *base)
 {
     if (!expr)
         return ERROR;
 
     // если не <name>=True|False
-    char* pos = strchr(expr, '=');
-    char* end = strchr(expr, ';');
+    char* pos = strchr(expr, EQUAL);
+    char* end = strchr(expr, SEMICOLON);
     if (pos == NULL || end == NULL)
         return NOT_EXPR;
 
-    remove_ch(expr, ' ');
-    pos = strchr(expr, '=');
-    end = strchr(expr, ';');
+    remove_ch(expr, SPACE);
+    pos = strchr(expr, EQUAL);
+    end = strchr(expr, SEMICOLON);
 
     /* Записываем имя*/
     size_t len_n = pos - expr;
@@ -322,9 +386,9 @@ int analyse_and_add(char *expr, list_t *lt)
 
     /* Определяем True|False */
     bool v;
-    if (strcmp(value, "True") == 0)
+    if (strcmp(value, TRUE) == 0)
         v = true;
-    else if (strcmp(value, "False") == 0)
+    else if (strcmp(value, FALSE) == 0)
         v = false;
     else
     {
@@ -334,36 +398,32 @@ int analyse_and_add(char *expr, list_t *lt)
     }
 
     /* Записываем в лист ключ-значение*/
-    list_push(lt, name, v);
+    list_push(base, name, v);
     free(value);
     return v;
 }
 
-bool is_reserved(char c)
+int convert(char *expr, list_t *base)
 {
-    return c == ' ' || c == '(' || c == ')' || c == '!' || c == '&' || c == '+' || c == '|' || c == '\n' || c == '\t';
-}
-
-int convert(char *expr, list_t *lt)
-{
-    if (!expr || lt == NULL)
+    if (!expr || base == NULL)
         return ERROR;
+
+    char temp[BUFFER_SIZE];
 
     /* Замена ключевых слов на соответсвующие символы */
     size_t i = 0;
-    for (i = 0; RESERVED[i] && RESERVED_C[i]; ++i)
-    {
-        str_replace(temp, sizeof(temp) - 1, expr, RESERVED[i], RESERVED_C[i]);
-        strcpy(expr, temp);
+    for (i = 0; RESERVED[i] && SERVICE_CHRS[i]; ++i) {
+        if(str_replace(temp, sizeof(temp) - 1, expr, RESERVED[i], SERVICE_CHRS[i]) == NULL)
+            return ERROR;
+        else
+            strcpy(expr, temp);
     }
     
     /* Замена переменных на их значение */
-    for (i = 0; expr[i]; ++i)
-    {
-        if (strchr("&|!+() 01", expr[i]) == NULL)
-        {
+    for (i = 0; expr[i]; ++i) {
+        if (is_possible(expr[i])) {
             size_t j = i;
-            for (j = i; !is_reserved(expr[j]) && expr[j]; ++j);
+            for (j = i; is_possible(expr[j]) && expr[j]; ++j);
 
             char* varible = (char*)calloc(j - i + 1, sizeof(char));
             if (!varible) {
@@ -374,17 +434,18 @@ int convert(char *expr, list_t *lt)
             if (strlen(varible) == 0)
                 break;
 
-            int status = get_value(lt, varible);
-            if (status == NOT_FOUND)
-            {
+            int status = get_value(base, varible);
+            if (status == NOT_FOUND)  {
                 free(varible);
                 return NOT_FOUND;
             }
 
             if (status == 0)
-                str_replace(temp, sizeof(temp) - 1, expr, varible, "0");
+                if (str_replace(temp, sizeof(temp) - 1, expr, varible, "0") == NULL)
+                    return ERROR;
             if (status == 1)
-                str_replace(temp, sizeof(temp) - 1, expr, varible, "1");
+                if (str_replace(temp, sizeof(temp) - 1, expr, varible, "1") == NULL)
+                    return ERROR;
 
             strcpy(expr, temp);
             free(varible);
@@ -392,118 +453,107 @@ int convert(char *expr, list_t *lt)
     }
 
     /* удаление пробелов*/
-    remove_ch(expr, ' ');
+    remove_ch(expr, SPACE);
 
     /* Успех*/
     return 0;
 }
 
-char* to_rpn(const char *expr, list_t *lt)
+char* to_rpn(const char *expr, list_t *base)
 {
-    struct stack *OPERS = NULL;
-    char* outstring = (char*)malloc(256*sizeof(char));
-    if (outstring == NULL)
+    stack_t *operators = NULL;
+    char* expr_in_rpn_format = (char*)malloc(BUFFER_SIZE * sizeof(char));
+    if (expr_in_rpn_format == NULL)
         return NULL;
     int k, point;
 
     k = point = 0;
-    /* Повтоpяем , пока не дойдем до '=' */
+    /* Повтоpяем , пока не дойдем до конца */
     while (expr[k])
     {
         /* Если очеpедной символ - ')' */
-        if (expr[k] == ')')
+        if (expr[k] == RIGHT_BRACKET)
             /* то выталкиваем из стека в выходную стpоку */
         {
             /* все знаки опеpаций до ближайшей */
-            while ((OPERS->c) != '(')
+            while ((operators->c) != LEFT_BRACKET)
                 /* откpывающей скобки */
-                outstring[point++] = DEL(&OPERS);
+                expr_in_rpn_format[point++] = pop(&operators);
             /* Удаляем из стека саму откpывающую скобку */
-            DEL(&OPERS);
+            pop(&operators);
         }
         /* Если очеpедной символ - значение , то */
-        if (expr[k] == '0' || expr[k] == '1')
+        if (is_value(expr[k]))
             /* пеpеписываем её в выходную стpоку */
-            outstring[point++] = expr[k];
+            expr_in_rpn_format[point++] = expr[k];
         /* Если очеpедной символ - '(' , то */
-        if (expr[k] == '(')
+        if (expr[k] == LEFT_BRACKET)
             /* заталкиваем её в стек */
-            OPERS = push(OPERS, '(');
-        if (expr[k] == '!' || expr[k] == '&' || expr[k] == '|' || expr[k] == '+')
+            operators = push(operators, LEFT_BRACKET);
+        if (is_operator(expr[k]))
             /* Если следующий символ - знак опеpации , то: */
         {
             /* если стек пуст */
-            if (OPERS == NULL)
+            if (operators == NULL)
                 /* записываем в него опеpацию */
-                OPERS = push(OPERS, expr[k]);
+                operators = push(operators, expr[k]);
             /* если не пуст */
             else
                 /* если пpиоpитет поступившей опеpации больше
                                 пpиоpитета опеpации на веpшине стека */
-                if (PRIOR(OPERS->c) < PRIOR(expr[k]))
+                if (get_priority(operators->c) < get_priority(expr[k]))
                     /* заталкиваем поступившую опеpацию на стек */
-                    OPERS = push(OPERS, expr[k]);
+                    operators = push(operators, expr[k]);
             /* если пpиоpитет меньше */
                 else
                 {
-                    while ((OPERS != NULL) && (PRIOR(OPERS->c) >= PRIOR(expr[k])))
+                    while ((operators != NULL) && (get_priority(operators->c) >= get_priority(expr[k])))
                         /* пеpеписываем в выходную стpоку все опеpации
                                             с большим или pавным пpиоpитетом */
-                        outstring[point++] = DEL(&OPERS);
+                        expr_in_rpn_format[point++] = pop(&operators);
                     /* записываем в стек поступившую  опеpацию */
-                    OPERS = push(OPERS, expr[k]);
+                    operators = push(operators, expr[k]);
                 }
         }
         /* Пеpеход к следующему символу входной стpоки */
         k++;
     }
     /* после pассмотpения всего выpажения */
-    while (OPERS != NULL)
+    while (operators != NULL)
         /* Пеpеписываем все опеpации из */
-        outstring[point++] = DEL(&OPERS);
+        expr_in_rpn_format[point++] = pop(&operators);
     /* стека в выходную стpоку */
-    outstring[point] = '\0';
+    expr_in_rpn_format[point] = '\0';
 
-    return outstring;
+    return expr_in_rpn_format;
 }
 
-int calculate(char *expr, list_t *lt)
+int calculate(char *expr, list_t *base)
 {
-    if (convert(expr, lt) != 0)
+    if (convert(expr, base) != 0)
         return ERROR;
 
-    char* outstring = to_rpn(expr, lt);
+    char* outstring = to_rpn(expr, base);
     if (outstring == NULL)
         return ERROR;
 
     // Если нет операторов и больше 1 переменной
-    if (strlen(outstring) > 1)
-    {
-        bool no_operators = strchr(outstring, '&') == NULL && 
-            strchr(outstring, '+') == NULL && 
-            strchr(outstring, '|') == NULL && 
-            strchr(outstring, '+') == NULL && 
-            strchr(outstring, '!') == NULL;
-        if (no_operators)
-        {
-            free(outstring);
-            return ERROR;
-        }
+    if (strlen(outstring) > 1 && !has_operators(outstring))  {
+        free(outstring);
+        return ERROR;
     }
     
     /* Выделене стэка для операций вычисления */
     int *stack = (int*)malloc(strlen(expr)*sizeof(int));
-    if (stack == NULL)
-    {
+    if (stack == NULL) {
         free(outstring);
         return ERROR;
     }
     // sp = индекс ячейки, куда будет push-иться очередное число
     int sp = 0;      // (sp-1) = индекс ячейки, являющейся вершиной стека
     for (size_t k = 0; outstring[k]; ++k) {
-        int c = outstring[k];
+        char c = outstring[k];
         switch (c) {
-        case  ' ':
         case '\n':
             break;
         case '+':
@@ -518,21 +568,18 @@ int calculate(char *expr, list_t *lt)
         case '!':
             stack[sp - 1] = !stack[sp - 1];
             break;
-        case '0':
-        {
+        case '0': {
             stack[sp++] = 0;
             break;
         }
-        case '1':
-        {
+        case '1': {
             stack[sp++] = 1;
             break;
         }
         default:
-            printf("%s", "[error]");
             free(stack);
             free(outstring);
-            return -1;
+            return WRONG_FORMAT;
         }
     }
 
@@ -542,5 +589,5 @@ int calculate(char *expr, list_t *lt)
     if (result == 0 || result == 1)
         return result;
 
-    return -1;
+    return ERROR;
 }
