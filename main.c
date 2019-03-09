@@ -1,4 +1,3 @@
-#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -213,18 +212,18 @@ stack_t *push(stack_t *head, char c)
    Изменяет указатель на веpшину стека */
 char pop(stack_t **head)
 {
-    stack_t *PTR = NULL;
+    stack_t *ptr = NULL;
     char el;
     /* Если стек пуст,  возвpащается '\0' */
     if (*head == NULL)
         return '\0';
     /* в PTR - адpес веpшины стека */
-    PTR = *head;
-    el = PTR->c;
+    ptr = *head;
+    el = ptr->c;
     /* Изменяем адpес веpшины стека */
-    *head = PTR->next;
+    *head = ptr->next;
     /* Освобождение памяти */
-    free(PTR);
+    free(ptr);
     /* Возвpат символа с веpшины стека */
     return el;
 }
@@ -249,7 +248,7 @@ int get_priority(char c)
     }
 }
 
-char *str_replace(char *dst, int num, const char *str,
+char *str_replace(char *dst, int size, const char *str,
     const char *orig, const char *rep) {
     if (!str || !orig || !rep) {
         return NULL;
@@ -259,10 +258,10 @@ char *str_replace(char *dst, int num, const char *str,
     size_t len2 = strlen(rep);
     char*  tmp = dst;
 
-    num -= 1;
+    size -= 1;
     while ((ptr = strstr(str, orig)) != NULL) {
-        num -= (ptr - str) + len2;
-        if (num < 1)
+        size -= (ptr - str) + len2;
+        if (size < 1)
             break;
 
         strncpy(dst, str, (size_t)(ptr - str));
@@ -272,7 +271,7 @@ char *str_replace(char *dst, int num, const char *str,
         str = ptr + len1;
     }
 
-    for (; (*dst = *str) && (num > 0); --num) {
+    for (; (*dst = *str) && (size > 0); --size) {
         ++dst;
         ++str;
     }
@@ -305,6 +304,9 @@ list_t* create_list()
 
 void list_push(list_t *lt, char *name, bool value)
 {
+    if (lt == NULL)
+        return;
+
     node_t* node = (node_t*)malloc(sizeof(node_t));
     if (!node)
         return;
@@ -330,7 +332,7 @@ int get_value(list_t *lt, char* name)
 
 void list_pop(list_t *lt)
 {
-    if (lt->size == 0) {
+    if ( lt == NULL || lt->size == 0) {
         return;
     }
 
@@ -550,7 +552,7 @@ int calculate(char *expr, list_t *base)
         return ERROR;
     }
     // sp = индекс ячейки, куда будет push-иться очередное число
-    int sp = 0;      // (sp-1) = индекс ячейки, являющейся вершиной стека
+    int sp = 0;      // (sp-1) вершиной стека
     for (size_t k = 0; outstring[k]; ++k) {
         char c = outstring[k];
         switch (c) {
